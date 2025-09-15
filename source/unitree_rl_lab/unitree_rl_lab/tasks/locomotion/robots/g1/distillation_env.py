@@ -1,3 +1,4 @@
+
 import math
 
 import isaaclab.sim as sim_utils
@@ -20,33 +21,86 @@ from isaaclab.utils.noise import AdditiveUniformNoiseCfg as Unoise
 
 from unitree_rl_lab.assets.robots.unitree import UNITREE_G1_29DOF_CFG as ROBOT_CFG
 from unitree_rl_lab.tasks.locomotion import mdp
+from unitree_rl_lab.tasks.locomotion.terrains import TEACHER_TERRAIN_CONFIGS
 
-COBBLESTONE_ROAD_CFG = terrain_gen.TerrainGeneratorCfg(
-    size=(8.0, 8.0),
-    border_width=20.0,
-    num_rows=9,
-    num_cols=21,
-    horizontal_scale=0.1,
-    vertical_scale=0.005,
-    slope_threshold=0.75,
-    difficulty_range=(0.0, 1.0),
-    use_cache=False,
-    sub_terrains={
-        "flat": terrain_gen.MeshPlaneTerrainCfg(proportion=0.5),
-    },
-)
+
+# Create a multi-terrain configuration for distillation
+# Each column of terrain corresponds to a different teacher's specialty
+def create_distillation_terrain_cfg(num_teachers: int = 6, difficulty_rows: int = 8):
+    """Create a terrain configuration for teacher-student distillation.
+    
+    **CORRECTED UNDERSTANDING:**
+    In IsaacLab, terrain difficulty increases with ROW number:
+    - Rows = difficulty levels (Row 0=easiest, Row N=hardest)
+    - Cols = terrain type distribution 
+    - Teachers should be assigned by COLUMN (terrain type), not row
+    
+    Args:
+        num_teachers: Number of teacher terrain columns (6 terrain types)
+        difficulty_rows: Number of rows for difficulty progression
+    
+    Returns:
+        TerrainGeneratorCfg: Configuration for generating NxT multi-terrain layout
+                           where T = num_teachers (columns for terrain types)
+    """
+    
+    # Create diverse terrain types that will be distributed across columns
+    # Each teacher will specialize in the terrain type of their assigned column
+    diverse_sub_terrains = {}
+    
+    # Add all terrain types from teacher configurations with equal proportions
+    terrain_count = 0
+    for terrain_idx, (terrain_name, terrain_cfg) in enumerate(TEACHER_TERRAIN_CONFIGS):
+        for sub_name, sub_cfg in terrain_cfg.sub_terrains.items():
+            if sub_name != "flat":  # Skip flat terrain for specialization
+                # Give each terrain type equal proportion
+                proportion = 0.8 / len(TEACHER_TERRAIN_CONFIGS)  # Distribute 80% among terrain types
+                new_cfg = type(sub_cfg)(
+                    proportion=proportion,
+                    **{k: v for k, v in sub_cfg.__dict__.items() if k != 'proportion'}
+                )
+                diverse_sub_terrains[f"{terrain_name}_{sub_name}"] = new_cfg
+                terrain_count += 1
+    
+    # Add flat terrain for robot spawning (20%)
+    diverse_sub_terrains["flat"] = terrain_gen.MeshPlaneTerrainCfg(proportion=0.2)
+    
+    # Create distillation terrain configuration
+    # - num_rows = difficulty_rows: Difficulty increases from Row 0 to Row N-1
+    # - num_cols = num_teachers: Each column represents a teacher's terrain specialization
+    # - Teachers are selected based on COLUMN index (terrain type)
+    # - Curriculum controls ROW progression (difficulty level)
+    
+    distillation_terrain_cfg = terrain_gen.TerrainGeneratorCfg(
+        size=(8.0, 8.0),
+        border_width=20.0,
+        num_rows=difficulty_rows,  # Multiple rows for difficulty progression
+        num_cols=num_teachers,     # 6 columns, one per teacher (terrain type)
+        horizontal_scale=0.1,
+        vertical_scale=0.005,
+        slope_threshold=0.75,
+        difficulty_range=(0.0, 1.0),
+        use_cache=False,
+        sub_terrains=diverse_sub_terrains,
+        curriculum=True,  # Enable curriculum learning on rows (difficulty)
+    )
+    
+    return distillation_terrain_cfg
+
+
+DISTILLATION_TERRAIN_CFG = create_distillation_terrain_cfg(num_teachers=6, difficulty_rows=8)
 
 
 @configclass
-class RobotSceneCfg(InteractiveSceneCfg):
-    """Configuration for the terrain scene with a legged robot."""
+class DistillationSceneCfg(InteractiveSceneCfg):
+    """Configuration for the teacher-student distillation scene."""
 
     # ground terrain
     terrain = TerrainImporterCfg(
         prim_path="/World/ground",
-        terrain_type="generator",  # "plane", "generator"
-        terrain_generator=COBBLESTONE_ROAD_CFG,  # None, ROUGH_TERRAINS_CFG
-        max_init_terrain_level=COBBLESTONE_ROAD_CFG.num_rows - 1,
+        terrain_type="generator",
+        terrain_generator=DISTILLATION_TERRAIN_CFG,
+        max_init_terrain_level=DISTILLATION_TERRAIN_CFG.num_rows - 1,
         collision_group=-1,
         physics_material=sim_utils.RigidBodyMaterialCfg(
             friction_combine_mode="multiply",
@@ -85,8 +139,8 @@ class RobotSceneCfg(InteractiveSceneCfg):
 
 
 @configclass
-class EventCfg:
-    """Configuration for events."""
+class DistillationEventCfg:
+    """Configuration for events in distillation training."""
 
     # startup
     physics_material = EventTerm(
@@ -157,8 +211,8 @@ class EventCfg:
 
 
 @configclass
-class CommandsCfg:
-    """Command specifications for the MDP."""
+class DistillationCommandsCfg:
+    """Command specifications for distillation training."""
 
     base_velocity = mdp.UniformLevelVelocityCommandCfg(
         asset_name="robot",
@@ -177,8 +231,8 @@ class CommandsCfg:
 
 
 @configclass
-class ActionsCfg:
-    """Action specifications for the MDP."""
+class DistillationActionsCfg:
+    """Action specifications for distillation training."""
 
     JointPositionAction = mdp.JointPositionActionCfg(
         asset_name="robot", joint_names=[".*"], scale=0.25, use_default_offset=True
@@ -186,21 +240,24 @@ class ActionsCfg:
 
 
 @configclass
-class ObservationsCfg:
-    """Observation specifications for the MDP."""
+class DistillationObservationsCfg:
+    """Observation specifications for distillation training - student policy WITHOUT base_lin_vel."""
 
     @configclass
     class PolicyCfg(ObsGroup):
-        """Observations for policy group."""
+        """Observations for student policy group WITHOUT base linear velocity."""
 
-        # observation terms (order preserved)
+        # observation terms (order preserved) - NO base_lin_vel for student
         base_ang_vel = ObsTerm(func=mdp.base_ang_vel, scale=0.2, noise=Unoise(n_min=-0.2, n_max=0.2))
         projected_gravity = ObsTerm(func=mdp.projected_gravity, noise=Unoise(n_min=-0.05, n_max=0.05))
         velocity_commands = ObsTerm(func=mdp.generated_commands, params={"command_name": "base_velocity"})
         joint_pos_rel = ObsTerm(func=mdp.joint_pos_rel, noise=Unoise(n_min=-0.01, n_max=0.01))
         joint_vel_rel = ObsTerm(func=mdp.joint_vel_rel, scale=0.05, noise=Unoise(n_min=-1.5, n_max=1.5))
         last_action = ObsTerm(func=mdp.last_action)
-        # gait_phase = ObsTerm(func=mdp.gait_phase, params={"period": 0.8})
+        height_scanner = ObsTerm(func=mdp.height_scan,
+            params={"sensor_cfg": SceneEntityCfg("height_scanner")},
+            clip=(-1.0, 1.0),
+        )
 
         def __post_init__(self):
             self.history_length = 5
@@ -212,20 +269,19 @@ class ObservationsCfg:
 
     @configclass
     class CriticCfg(ObsGroup):
-        """Observations for critic group."""
+        """Observations for critic group - includes base_lin_vel for privileged learning."""
 
-        base_lin_vel = ObsTerm(func=mdp.base_lin_vel)
+        base_lin_vel = ObsTerm(func=mdp.base_lin_vel)  # Critic still has access to this
         base_ang_vel = ObsTerm(func=mdp.base_ang_vel, scale=0.2)
         projected_gravity = ObsTerm(func=mdp.projected_gravity)
         velocity_commands = ObsTerm(func=mdp.generated_commands, params={"command_name": "base_velocity"})
         joint_pos_rel = ObsTerm(func=mdp.joint_pos_rel)
         joint_vel_rel = ObsTerm(func=mdp.joint_vel_rel, scale=0.05)
         last_action = ObsTerm(func=mdp.last_action)
-        # gait_phase = ObsTerm(func=mdp.gait_phase, params={"period": 0.8})
-        # height_scanner = ObsTerm(func=mdp.height_scan,
-        #     params={"sensor_cfg": SceneEntityCfg("height_scanner")},
-        #     clip=(-1.0, 5.0),
-        # )
+        height_scanner = ObsTerm(func=mdp.height_scan,
+            params={"sensor_cfg": SceneEntityCfg("height_scanner")},
+            clip=(-1.0, 1.0),
+        )
 
         def __post_init__(self):
             self.history_length = 5
@@ -233,10 +289,47 @@ class ObservationsCfg:
     # privileged observations
     critic: CriticCfg = CriticCfg()
 
+    @configclass
+    class TeacherCfg(ObsGroup):
+        """Observations for teacher policy group - includes privileged terrain information."""
+
+        base_lin_vel = ObsTerm(func=mdp.base_lin_vel)  # Teacher has access to privileged info
+        base_ang_vel = ObsTerm(func=mdp.base_ang_vel, scale=0.2)
+        projected_gravity = ObsTerm(func=mdp.projected_gravity)
+        velocity_commands = ObsTerm(func=mdp.generated_commands, params={"command_name": "base_velocity"})
+        joint_pos_rel = ObsTerm(func=mdp.joint_pos_rel)
+        joint_vel_rel = ObsTerm(func=mdp.joint_vel_rel, scale=0.05)
+        last_action = ObsTerm(func=mdp.last_action)
+        height_scanner = ObsTerm(func=mdp.height_scan,
+            params={"sensor_cfg": SceneEntityCfg("height_scanner")},
+            clip=(-1.0, 1.0),
+        )
+
+        def __post_init__(self):
+            self.history_length = 5
+
+    # teacher observations (includes privileged information)
+    teacher: TeacherCfg = TeacherCfg()
+
+    @configclass
+    class TerrainInfoCfg(ObsGroup):
+        """Terrain information for teacher selection."""
+
+        # Terrain column ID (0-5 for 6 terrain types/teachers)
+        # Each column represents a different terrain type that a teacher specializes in
+        terrain_id = ObsTerm(func=mdp.terrain_info)
+
+        def __post_init__(self):
+            self.enable_corruption = False
+            self.concatenate_terms = True  # Must be True to return tensor instead of TensorDict
+
+    # terrain information for teacher selection
+    terrain_info: TerrainInfoCfg = TerrainInfoCfg()
+
 
 @configclass
-class RewardsCfg:
-    """Reward terms for the MDP."""
+class DistillationRewardsCfg:
+    """Reward terms for distillation training."""
 
     # -- task
     track_lin_vel_xy = RewTerm(
@@ -338,8 +431,8 @@ class RewardsCfg:
 
 
 @configclass
-class TerminationsCfg:
-    """Termination terms for the MDP."""
+class DistillationTerminationsCfg:
+    """Termination terms for distillation training."""
 
     time_out = DoneTerm(func=mdp.time_out, time_out=True)
     base_height = DoneTerm(func=mdp.root_height_below_minimum, params={"minimum_height": 0.2})
@@ -347,28 +440,28 @@ class TerminationsCfg:
 
 
 @configclass
-class CurriculumCfg:
-    """Curriculum terms for the MDP."""
+class DistillationCurriculumCfg:
+    """Curriculum terms for distillation training."""
 
     terrain_levels = CurrTerm(func=mdp.terrain_levels_vel)
-    lin_vel_cmd_levels = CurrTerm(mdp.lin_vel_cmd_levels)
+    lin_vel_cmd_levels = CurrTerm(func=mdp.lin_vel_cmd_levels)
 
 
 @configclass
-class RobotEnvCfg(ManagerBasedRLEnvCfg):
-    """Configuration for the locomotion velocity-tracking environment."""
+class DistillationEnvCfg(ManagerBasedRLEnvCfg):
+    """Configuration for the teacher-student distillation environment."""
 
     # Scene settings
-    scene: RobotSceneCfg = RobotSceneCfg(num_envs=4096, env_spacing=2.5)
+    scene: DistillationSceneCfg = DistillationSceneCfg(num_envs=2048, env_spacing=4.0)
     # Basic settings
-    observations: ObservationsCfg = ObservationsCfg()
-    actions: ActionsCfg = ActionsCfg()
-    commands: CommandsCfg = CommandsCfg()
+    observations: DistillationObservationsCfg = DistillationObservationsCfg()
+    actions: DistillationActionsCfg = DistillationActionsCfg()
+    commands: DistillationCommandsCfg = DistillationCommandsCfg()
     # MDP settings
-    rewards: RewardsCfg = RewardsCfg()
-    terminations: TerminationsCfg = TerminationsCfg()
-    events: EventCfg = EventCfg()
-    curriculum: CurriculumCfg = CurriculumCfg()
+    rewards: DistillationRewardsCfg = DistillationRewardsCfg()
+    terminations: DistillationTerminationsCfg = DistillationTerminationsCfg()
+    events: DistillationEventCfg = DistillationEventCfg()
+    curriculum: DistillationCurriculumCfg = DistillationCurriculumCfg()
 
     def __post_init__(self):
         """Post initialization."""
@@ -382,12 +475,10 @@ class RobotEnvCfg(ManagerBasedRLEnvCfg):
         self.sim.physx.gpu_max_rigid_patch_count = 10 * 2**15
 
         # update sensor update periods
-        # we tick all the sensors based on the smallest update period (physics update period)
         self.scene.contact_forces.update_period = self.sim.dt
         self.scene.height_scanner.update_period = self.decimation * self.sim.dt
 
-        # check if terrain levels curriculum is enabled - if so, enable curriculum for terrain generator
-        # this generates terrains with increasing difficulty and is useful for training
+        # Enable curriculum for distillation training
         if getattr(self.curriculum, "terrain_levels", None) is not None:
             if self.scene.terrain.terrain_generator is not None:
                 self.scene.terrain.terrain_generator.curriculum = True
@@ -397,10 +488,10 @@ class RobotEnvCfg(ManagerBasedRLEnvCfg):
 
 
 @configclass
-class RobotPlayEnvCfg(RobotEnvCfg):
+class DistillationPlayEnvCfg(DistillationEnvCfg):
     def __post_init__(self):
         super().__post_init__()
         self.scene.num_envs = 32
-        self.scene.terrain.terrain_generator.num_rows = 2
+        self.scene.terrain.terrain_generator.num_rows = len(TEACHER_TERRAIN_CONFIGS)
         self.scene.terrain.terrain_generator.num_cols = 10
         self.commands.base_velocity.ranges = self.commands.base_velocity.limit_ranges
