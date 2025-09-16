@@ -19,6 +19,7 @@ def gait_phase(env: ManagerBasedRLEnv, period: float) -> torch.Tensor:
     return phase
 
 
+# TODO determine cols
 def terrain_info(env: ManagerBasedRLEnv) -> torch.Tensor:
     """Return terrain information for each environment.
     

@@ -35,32 +35,9 @@ class BasePPORunnerCfg(RslRlOnPolicyRunnerCfg):
         max_grad_norm=1.0,
     )
 
-
-@configclass
-class FlatTerrainPPORunnerCfg(BasePPORunnerCfg):
-    """PPO配置用于平地训练 (Stage 1)"""
-    max_iterations = 1500
-    experiment_name = "flat_terrain"
-    algorithm = RslRlPpoAlgorithmCfg(
-        value_loss_coef=1.0,
-        use_clipped_value_loss=True,
-        clip_param=0.2,
-        entropy_coef=0.01,
-        num_learning_epochs=5,
-        num_mini_batches=4,
-        learning_rate=1.0e-3,
-        schedule="adaptive",
-        gamma=0.99,
-        lam=0.95,
-        desired_kl=0.01,
-        max_grad_norm=1.0,
-    )
-
-
 @configclass
 class TeacherPPORunnerCfg(BasePPORunnerCfg):
-    """PPO配置用于教师策略训练 (Stage 2)"""
-    max_iterations = 2000
+    max_iterations = 40000
     experiment_name = "teacher_policy"
     algorithm = RslRlPpoAlgorithmCfg(
         value_loss_coef=1.0,
@@ -70,27 +47,6 @@ class TeacherPPORunnerCfg(BasePPORunnerCfg):
         num_learning_epochs=5,
         num_mini_batches=4,
         learning_rate=1.0e-3,
-        schedule="adaptive",
-        gamma=0.99,
-        lam=0.95,
-        desired_kl=0.01,
-        max_grad_norm=1.0,
-    )
-
-
-@configclass
-class DistillationPPORunnerCfg(BasePPORunnerCfg):
-    """PPO配置用于蒸馏训练 (Stage 3 & 4)"""
-    max_iterations = 3000
-    experiment_name = "distillation"
-    algorithm = RslRlPpoAlgorithmCfg(
-        value_loss_coef=1.0,
-        use_clipped_value_loss=True,
-        clip_param=0.2,
-        entropy_coef=0.01,
-        num_learning_epochs=5,
-        num_mini_batches=4,
-        learning_rate=5.0e-4,  # 更低的学习率用于蒸馏
         schedule="adaptive",
         gamma=0.99,
         lam=0.95,

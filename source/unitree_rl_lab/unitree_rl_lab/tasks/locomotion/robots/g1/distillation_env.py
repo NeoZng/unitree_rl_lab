@@ -54,16 +54,13 @@ def create_distillation_terrain_cfg(num_teachers: int = 6, difficulty_rows: int 
         for sub_name, sub_cfg in terrain_cfg.sub_terrains.items():
             if sub_name != "flat":  # Skip flat terrain for specialization
                 # Give each terrain type equal proportion
-                proportion = 0.8 / len(TEACHER_TERRAIN_CONFIGS)  # Distribute 80% among terrain types
+                proportion = 1 / len(TEACHER_TERRAIN_CONFIGS)  # Distribute 100% among terrain types
                 new_cfg = type(sub_cfg)(
                     proportion=proportion,
                     **{k: v for k, v in sub_cfg.__dict__.items() if k != 'proportion'}
                 )
                 diverse_sub_terrains[f"{terrain_name}_{sub_name}"] = new_cfg
                 terrain_count += 1
-    
-    # Add flat terrain for robot spawning (20%)
-    diverse_sub_terrains["flat"] = terrain_gen.MeshPlaneTerrainCfg(proportion=0.2)
     
     # Create distillation terrain configuration
     # - num_rows = difficulty_rows: Difficulty increases from Row 0 to Row N-1
