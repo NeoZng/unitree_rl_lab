@@ -9,7 +9,7 @@ set TEACHER_GRID=     C:\Users\BrainCo\Desktop\unitree_rl_lab\logs\rsl_rl\unitre
 set TEACHER_RANDOM=   C:\Users\BrainCo\Desktop\unitree_rl_lab\logs\rsl_rl\unitree_g1_29dof_velocity\2025-09-15_11-59-13\model_3200.pt
 set TEACHER_WAVE=     C:\Users\BrainCo\Desktop\unitree_rl_lab\logs\rsl_rl\unitree_g1_29dof_velocity\2025-09-15_11-59-13\model_3100.pt
 
-python train_multi_teacher.py ^
+python .\scripts\rsl_rl\train_multi_teacher.py ^
     --task Isaac-Velocity-Distillation-G1-v0 ^
     --teacher_check ^
     --teacher_paths ^

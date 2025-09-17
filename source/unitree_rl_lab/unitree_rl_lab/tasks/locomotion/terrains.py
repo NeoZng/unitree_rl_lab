@@ -18,7 +18,6 @@ PYRAMID_TERRAIN_CFG = terrain_gen.TerrainGeneratorCfg(
     difficulty_range=(0.0, 1.0),
     use_cache=False,
     sub_terrains={
-        "flat": terrain_gen.MeshPlaneTerrainCfg(proportion=0.2),  # Increased flat area for robot initialization
         "pyramid_stairs": terrain_gen.MeshPyramidStairsTerrainCfg(
             proportion=0.4,
             step_height_range=(0.05, 0.23),
@@ -50,7 +49,6 @@ SLOPE_TERRAIN_CFG = terrain_gen.TerrainGeneratorCfg(
     difficulty_range=(0.0, 1.0),
     use_cache=False,
     sub_terrains={
-        "flat": terrain_gen.MeshPlaneTerrainCfg(proportion=0.5),  # Increased for robot initialization
         "hf_pyramid_slope": terrain_gen.HfPyramidSlopedTerrainCfg(
             proportion=0.25, slope_range=(0.0, 0.4), platform_width=2.0, border_width=0.25
         ),
@@ -72,7 +70,6 @@ STAIRS_TERRAIN_CFG = terrain_gen.TerrainGeneratorCfg(
     difficulty_range=(0.0, 1.0),
     use_cache=False,
     sub_terrains={
-        "flat": terrain_gen.MeshPlaneTerrainCfg(proportion=0.5),  # Increased for robot initialization
         "pyramid_stairs": terrain_gen.MeshPyramidStairsTerrainCfg(
             proportion=0.5,
             step_height_range=(0.05, 0.23),
@@ -96,7 +93,6 @@ GRID_TERRAIN_CFG = terrain_gen.TerrainGeneratorCfg(
     difficulty_range=(0.0, 1.0),
     use_cache=False,
     sub_terrains={
-        "flat": terrain_gen.MeshPlaneTerrainCfg(proportion=0.5),  # Increased for robot initialization
         "boxes": terrain_gen.MeshRandomGridTerrainCfg(
             proportion=0.5, grid_width=0.45, grid_height_range=(0.05, 0.2), platform_width=2.0
         ),
@@ -115,12 +111,7 @@ RANDOM_TERRAIN_CFG = terrain_gen.TerrainGeneratorCfg(
     difficulty_range=(0.0, 1.0),
     use_cache=False,
     sub_terrains={
-        "flat": terrain_gen.MeshPlaneTerrainCfg(proportion=0.5),  # Increased for robot initialization
-        "random_rough": terrain_gen.HfRandomUniformTerrainCfg(
-            proportion=0.25, noise_range=(0.01, 0.06), noise_step=0.01, border_width=0.25
-        ),
         "hf_pyramid_discrete": terrain_gen.HfDiscreteObstaclesTerrainCfg(
-            proportion=0.25, 
             obstacle_height_mode="choice", 
             obstacle_height_range=(0.05, 0.15),
             obstacle_width_range=(0.2, 0.8),  # Added missing parameter
@@ -155,10 +146,10 @@ WAVE_TERRAIN_CFG = terrain_gen.TerrainGeneratorCfg(
 
 # List of all terrain configurations for easy iteration
 TEACHER_TERRAIN_CONFIGS = [
+    ("wave", WAVE_TERRAIN_CFG),
     ("pyramid", PYRAMID_TERRAIN_CFG),
-    ("slope", SLOPE_TERRAIN_CFG), 
     ("stairs", STAIRS_TERRAIN_CFG),
     ("grid", GRID_TERRAIN_CFG),
     ("random", RANDOM_TERRAIN_CFG),
-    ("wave", WAVE_TERRAIN_CFG),
+    ("slope", SLOPE_TERRAIN_CFG), 
 ]
